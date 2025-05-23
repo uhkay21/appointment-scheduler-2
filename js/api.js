@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000'; // Replace with your backend URL when deployed
+const API_BASE_URL = 'https://appointment-scheduler-2-backend.onrender.com'; // Replace with your backend URL when deployed
 
 // Fetch businesses
 async function getBusinesses() {
@@ -62,6 +62,48 @@ async function createAppointment(appointmentData) {
     return await response.json();
   } catch (error) {
     console.error('Error creating appointment:', error);
+    throw error;
+  }
+}
+
+// Fetch all clients
+async function getClients() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients`);
+    if (!response.ok) throw new Error('Failed to fetch clients');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching clients:', error);
+    throw error;
+  }
+}
+
+// Get client by ID
+async function getClient(id) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch client');
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching client ${id}:`, error);
+    throw error;
+  }
+}
+
+// Create a new client
+async function createClient(clientData) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(clientData),
+    });
+    if (!response.ok) throw new Error('Failed to create client');
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating client:', error);
     throw error;
   }
 }
