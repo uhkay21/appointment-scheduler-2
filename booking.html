@@ -6,9 +6,10 @@
     <title>Book Appointment - Salon Scheduler</title>
     <script src="https://unpkg.com/alpinejs" defer></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/api.js"></script>
 </head>
 <body class="bg-gray-50">
-    <div x-data="bookingForm()" class="min-h-screen">
+    <div x-data="bookingForm()" x-init="init()" class="min-h-screen">
         <!-- Header -->
         <header class="bg-white shadow-sm">
             <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -43,6 +44,13 @@
 
             <!-- Booking Forms -->
             <div class="bg-white rounded-lg shadow-md p-6">
+            <div x-show="loading" class="text-center mb-4">
+                <span class="text-blue-600">Loading...</span>
+            </div>
+            
+            <div x-show="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <span x-text="error"></span>
+            </div>
                 <!-- Step 1: Service Selection -->
                 <div x-show="currentStep === 0">
                     <h2 class="text-xl font-semibold mb-4">Select a Service</h2>
@@ -72,6 +80,7 @@
                                 type="date"
                                 x-model="selectedDate"
                                 :min="minDate"
+                                @change="dateChanged()"
                                 class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                         <!-- Time Slots -->
@@ -93,6 +102,37 @@
                 <!-- Step 3: Client Information -->
                 <div x-show="currentStep === 2">
                     <h2 class="text-xl font-semibold mb-4">Your Information</h2>
+                    <div class="mb-4">
+                        <button 
+                            type="button"
+                            @click="showExistingClientSearch = true"
+                            class="text-blue-600 hover:text-blue-800">
+                            Already a client? Click here to search
+                        </button>
+                        
+                        <div x-show="showExistingClientSearch" class="mt-4 p-4 border rounded-md">
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700">Search by Email or Name</label>
+                                <input 
+                                    type="text" 
+                                    x-model="clientSearch" 
+                                    @input="searchClients()"
+                                    placeholder="Enter email or name"
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            
+                            <div x-show="searchResults.length > 0" class="mt-2">
+                                <template x-for="client in searchResults" :key="client.id">
+                                    <div 
+                                        @click="selectExistingClient(client)"
+                                        class="cursor-pointer p-2 hover:bg-blue-50 border-b">
+                                        <p class="font-medium" x-text="client.name"></p>
+                                        <p class="text-sm text-gray-600" x-text="client.email"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
                     <form @submit.prevent="submitBooking" class="space-y-4">
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
@@ -147,106 +187,216 @@
 
     <script>
         function bookingForm() {
-            return {
-                steps: ['Select Service', 'Choose Date & Time', 'Your Information'],
-                currentStep: 0,
-                selectedService: null,
-                selectedDate: new Date().toISOString().split('T')[0],
-                selectedTime: null,
-                clientInfo: {
-                    name: '',
-                    email: '',
-                    phone: '',
-                    notes: ''
-                },
-
-                // Placeholder data
-                services: [
-                    { id: 1, name: 'Haircut & Style', price: 65.00, duration: 45 },
-                    { id: 2, name: 'Men\'s Trim', price: 35.00, duration: 30 },
-                    { id: 3, name: 'Color & Highlights', price: 150.00, duration: 120 },
-                    { id: 4, name: 'Beard Trim', price: 25.00, duration: 20 }
-                ],
-
-                get minDate() {
-                    return new Date().toISOString().split('T')[0];
-                },
-
-                get availableTimeSlots() {
-                    // Placeholder time slots (9 AM to 5 PM, hourly)
-                    return ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
-                },
-
-                get canProceed() {
-                    switch (this.currentStep) {
-                        case 0:
-                            return this.selectedService !== null;
-                        case 1:
-                            return this.selectedDate && this.selectedTime;
-                        case 2:
-                            return this.clientInfo.name && this.clientInfo.email && this.clientInfo.phone;
-                        default:
-                            return false;
-                    }
-                },
-
-                selectService(service) {
-                    this.selectedService = service;
-                },
-
-                selectTimeSlot(time) {
-                    this.selectedTime = time;
-                },
-
-                formatPrice(price) {
-                    return new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD'
-                    }).format(price);
-                },
-
-                formatTime(time) {
-                    return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                    });
-                },
-
-                nextStep() {
-                    if (this.canProceed && this.currentStep < this.steps.length - 1) {
-                        this.currentStep++;
-                    }
-                },
-
-                previousStep() {
-                    if (this.currentStep > 0) {
-                        this.currentStep--;
-                    }
-                },
-
-                submitBooking() {
-                    // Placeholder for form submission
-                    console.log('Booking submitted:', {
-                        service: this.selectedService,
-                        date: this.selectedDate,
-                        time: this.selectedTime,
-                        client: this.clientInfo
-                    });
-                    alert('Booking submitted successfully!');
+        return {
+            steps: ['Select Service', 'Choose Date & Time', 'Your Information'],
+            currentStep: 0,
+            businessId: 1, // Default business ID - could be passed as URL parameter
+            services: [],
+            selectedService: null,
+            selectedDate: new Date().toISOString().split('T')[0],
+            availableTimeSlots: [],
+            selectedTime: null,
+            clientInfo: {
+                name: '',
+                email: '',
+                phone: '',
+                notes: ''
+            },
+            loading: false,
+            error: null,
+    
+            // Initialize the form
+            async init() {
+                try {
+                    // Fetch the business data first
+                    const business = await getBusiness(this.businessId);
+                    console.log('Business loaded:', business);
+                    
+                    // Then fetch services for this business
+                    await this.fetchServices();
+                } catch (error) {
+                    this.error = `Failed to load data: ${error.message}`;
+                    console.error('Error initializing booking form:', error);
                 }
-            };
-        }
+            },
+    
+            async fetchServices() {
+                try {
+                    this.loading = true;
+                    this.services = await getServices(this.businessId);
+                    this.loading = false;
+                    console.log('Services loaded:', this.services);
+                } catch (error) {
+                    this.loading = false;
+                    this.error = `Failed to load services: ${error.message}`;
+                    console.error('Error fetching services:', error);
+                }
+            },
+    
+            async fetchAvailableSlots() {
+                if (!this.selectedService || !this.selectedDate) return;
+                
+                try {
+                    this.loading = true;
+                    const response = await getAvailableSlots(this.selectedService.id, this.selectedDate);
+                    this.availableTimeSlots = response.slots || [];
+                    this.loading = false;
+                    console.log('Available slots loaded:', this.availableTimeSlots);
+                } catch (error) {
+                    this.loading = false;
+                    this.error = `Failed to load available times: ${error.message}`;
+                    console.error('Error fetching time slots:', error);
+                }
+            },
+    
+            selectService(service) {
+                this.selectedService = service;
+                this.selectedTime = null; // Reset time selection
+                
+                // When a new service is selected, fetch available time slots
+                if (this.selectedDate) {
+                    this.fetchAvailableSlots();
+                }
+            },
+    
+            async dateChanged() {
+                this.selectedTime = null; // Reset time selection
+                await this.fetchAvailableSlots();
+            },
+    
+            selectTimeSlot(time) {
+                this.selectedTime = time;
+            },
+    
+            get minDate() {
+                return new Date().toISOString().split('T')[0];
+            },
+    
+            get canProceed() {
+                switch (this.currentStep) {
+                    case 0:
+                        return this.selectedService !== null;
+                    case 1:
+                        return this.selectedDate && this.selectedTime;
+                    case 2:
+                        return this.clientInfo.name && this.clientInfo.email && this.clientInfo.phone;
+                    default:
+                        return false;
+                }
+            },
+    
+            formatPrice(price) {
+                return new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD'
+                }).format(price);
+            },
+    
+            formatTime(time) {
+                return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            },
+    
+            nextStep() {
+                if (this.canProceed && this.currentStep < this.steps.length - 1) {
+                    this.currentStep++;
+                    
+                    // If moving to time selection step, fetch available times
+                    if (this.currentStep === 1 && this.selectedService) {
+                        this.fetchAvailableSlots();
+                    }
+                }
+            },
+    
+            previousStep() {
+                if (this.currentStep > 0) {
+                    this.currentStep--;
+                }
+            },
+    
+            async submitBooking() {
+                if (!this.canProceed) return;
+                
+                try {
+                    this.loading = true;
+                    
+                    // First, create or get client
+                    let clientId;
+                    try {
+                        // Check if client already exists by email
+                        const clients = await getClients();
+                        const existingClient = clients.find(client => 
+                            client.email.toLowerCase() === this.clientInfo.email.toLowerCase()
+                        );
+                        
+                        if (existingClient) {
+                            clientId = existingClient.id;
+                            console.log('Using existing client:', existingClient);
+                        } else {
+                            // Create client with the provided information
+                            const clientData = {
+                                name: this.clientInfo.name,
+                                email: this.clientInfo.email,
+                                phone: this.clientInfo.phone,
+                                notes: this.clientInfo.notes || ''
+                            };
+                            
+                            const newClient = await createClient(clientData);
+                            clientId = newClient.id;
+                            console.log('Client created:', newClient);
+                        }
+                    } catch (error) {
+                        this.loading = false;
+                        this.error = `Failed to process client information: ${error.message}`;
+                        console.error('Error processing client:', error);
+                        return;
+                    }
+                    
+                    // Calculate end time based on service duration and start time
+                    const [hours, minutes] = this.selectedTime.split(':').map(Number);
+                    const startDate = new Date();
+                    startDate.setHours(hours, minutes, 0);
+                    
+                    const endDate = new Date(startDate);
+                    endDate.setMinutes(endDate.getMinutes() + this.selectedService.duration);
+                    
+                    const endTime = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
+                    
+                    // Create appointment data object
+                    const appointmentData = {
+                        business_id: this.businessId,
+                        service_id: this.selectedService.id,
+                        client_id: clientId,
+                        staff_id: 1, // This would ideally be selected or assigned
+                        date: this.selectedDate,
+                        start_time: this.selectedTime,
+                        end_time: endTime,
+                        notes: this.clientInfo.notes || ''
+                    };
+                    
+                    console.log('Submitting appointment:', appointmentData);
+                    
+                    // Send to API
+                    const result = await createAppointment(appointmentData);
+                    
+                    this.loading = false;
+                    
+                    // Show success message and redirect to confirmation page
+                    alert('Appointment booked successfully!');
+                    window.location.href = 'confirmation.html?id=' + result.id;
+                    
+                } catch (error) {
+                    this.loading = false;
+                    this.error = `Failed to book appointment: ${error.message}`;
+                    console.error('Error booking appointment:', error);
+                    alert('There was a problem booking your appointment. Please try again.');
+                }
+            }
+        };
+    }
     </script>
-</body>
-</html>
-
-    <!-- Alpine.js logic // this is a placeholder-->
-  <script>
-    // This is where you would add any additional Alpine.js logic
-    document.addEventListener('alpine:init', () => {
-      // Global Alpine data and methods can be defined here
-    });
-  </script>
 </body>
 </html>
